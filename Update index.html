@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nova Solar Energy Calculator (MY – TNB)</title>
+  <style>
+    :root{
+      --primary:#2563eb; --primary-600:#1d4ed8;
+      --bg:#0b1020; --panel:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --ok:#22c55e; --warn:#f97316;
+      --chip:#1f2937; --card:#0b1222;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+      background: radial-gradient(1200px 500px at 20% -20%, #0b3b7e33, transparent),
+                  radial-gradient(900px 400px at 120% 20%, #0ea5e980, transparent),
+                  var(--bg);
+      color:var(--text);
+    }
+    header{padding:28px 16px; text-align:center}
+    header h1{margin:0;font-size:28px;letter-spacing:.3px}
+    header p{margin:8px 0 0;color:var(--muted)}
+    .wrap{max-width:1040px;margin:0 auto;padding:16px}
+    .grid{display:grid; gap:16px; grid-template-columns:repeat(12,1fr)}
+    .card{grid-column:span 12; background:linear-gradient(180deg,#0c142a,#0b1222);
+      border:1px solid #1e293b; border-radius:14px; padding:18px;
+      box-shadow:0 12px 32px rgba(0,0,0,.35), inset 0 1px 0 #1e293b}
+    @media (min-width:900px){ .span-7{grid-column:span 7} .span-5{grid-column:span 5} }
+    .row{display:grid; gap:12px; grid-template-columns:1fr}
+    @media (min-width:680px){ .row{grid-template-columns:repeat(2,1fr)} }
+    label{font-size:13px;color:var(--muted)}
+    input, select{
+      width:100%; padding:10px 12px; border-radius:10px; border:1px solid #334155;
+      background:#0b1222; color:var(--text); outline:none;
+    }
+    input:focus, select:focus{border-color:#60a5fa; box-shadow:0 0 0 3px #1d4ed833}
+    .tabs{display:flex; background:#0b1222; border:1px solid #334155; border-radius:12px; padding:4px; gap:4px}
+    .tabs button{flex:1; padding:10px 12px; border:0; border-radius:10px; cursor:pointer; color:var(--text); background:transparent; transition:.15s}
+    .tabs button.active{background:var(--primary)}
+    .chips{display:flex; gap:6px; flex-wrap:wrap}
+    .chip{background:var(--chip); color:#cbd5e1; padding:6px 10px; border-radius:999px; font-size:12px}
+    .btn{width:100%; padding:12px 14px; border-radius:12px; border:0; cursor:pointer; background:var(--primary); color:white; font-weight:600; letter-spacing:.2px}
+    .btn:hover{background:var(--primary-600)}
+    .kpi{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:10px}
+    .kcard{background:#0b1222; border:1px solid #1f2937; border-radius:12px; padding:12px}
+    .kcard h3{margin:0 0 4px;font-size:14px;color:#9aa4b2}
+    .big{font-size:22px;font-weight:700}
+    .muted{color:var(--muted)}
+    .good{color:var(--ok)} .warn{color:var(--warn)}
+    .hr{height:1px;background:#1f2937;margin:14px 0}
+    small.note{color:#94a3b8}
+    footer{padding:20px; text-align:center; color:#64748b}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Nova Solar Energy Calculator — Malaysia (TNB)</h1>
+    <p>容量、逆變器、儲能配置 + TNB（Normal / ToU / NEM）節省估算</p>
+  </header>
+
+  <div class="wrap">
+    <div class="grid">
+      <!-- 左側：輸入 -->
+      <section class="card span-7">
+        <div class="chips">
+          <span class="chip">🇲🇾 TNB</span>
+          <span class="chip">Domestic (General / ToU)</span>
+          <span class="chip">NEM 自用 + 回饋（簡化）</span>
+        </div>
+
+        <h2 style="margin:10px 0 8px">電價模式</h2>
+        <div class="tabs" role="tablist" aria-label="Tariff Mode">
+          <button id="tab-normal" class="active" onclick="setTariff('NORMAL')">Normal</button>
+          <button id="tab-tou" onclick="setTariff('TOU')">ToU</button>
+          <button id="tab-nem" onclick="setTariff('NEM')">NEM</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="row">
+          <div>
+            <label for="monthlyUsage">每月總用電量 (kWh)</label>
+            <input id="monthlyUsage" type="number" placeholder="例如 900" value="900" min="1" />
+          </div>
+          <div>
+            <label for="dayRatio">白天用電比例 (%)</label>
+            <input id="dayRatio" type="number" placeholder="例如 70" value="70" min="0" max="100" />
+          </div>
+        </div>
+
+        <div id="touRow" class="row" style="margin-top:10px; display:none">
+          <div>
+            <label for="peakRatio">（ToU）峰時用電比例 (%)</label>
+            <input id="peakRatio" type="number" placeholder="例如 40" value="40" min="0" max="100" />
+          </div>
+          <div>
+            <label>說明</label>
+            <input disabled value="離峰 = 100 - 峰時" />
+          </div>
+        </div>
+
+        <h2 style="margin:16px 0 8px">系統假設</h2>
+        <div class="row">
+          <div>
+            <label for="sunlightHours">日照小時 (h/day)</label>
+            <input id="sunlightHours" type="number" step="0.1" value="4.5" min="1" max="8" />
+          </div>
+          <div>
+            <label for="solarEff">PV 系統效率 (%)</label>
+            <input id="solarEff" type="number" value="80" min="60" max="98" />
+          </div>
+          <div>
+            <label for="batteryUse">是否使用儲能電池？</label>
+            <select id="batteryUse" onchange="toggleBattery()">
+              <option value="no" selected>否</option>
+              <option value="yes">是</option>
+            </select>
+          </div>
+          <div id="batEffBox" style="display:none">
+            <label for="batteryEff">電池往返效率 (%)</label>
+            <input id="batteryEff" type="number" value="90" min="60" max="99" />
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <button class="btn" id="calcBtn">開始計算</button>
+        <small class="note">
+          *工程預估：收費常數以公開資料簡化；最終帳單以 TNB 當期公告為準。
+        </small>
+      </section>
+
+      <!-- 右側：輸出 -->
+      <section class="card span-5" id="outCard">
+        <h2 style="margin:0 0 8px">結果</h2>
+        <div class="kpi">
+          <div class="kcard">
+            <h3>太陽能容量</h3>
+            <div class="big" id="outCap">—</div>
+            <div class="muted">kW</div>
+          </div>
+          <div class="kcard">
+            <h3>逆變器建議</h3>
+            <div class="big" id="outInv">—</div>
+            <div class="muted">kW</div>
+          </div>
+          <div class="kcard">
+            <h3>電池容量</h3>
+            <div class="big" id="outBat">—</div>
+            <div class="muted">kWh（夜用+20%）</div>
+          </div>
+          <div class="kcard">
+            <h3>原始月電費</h3>
+            <div class="big" id="outBill0">—</div>
+            <div class="muted">RM</div>
+          </div>
+          <div class="kcard">
+            <h3>安裝後月電費</h3>
+            <div class="big" id="outBill1">—</div>
+            <div class="muted">RM</div>
+          </div>
+          <div class="kcard">
+            <h3>預估月節省</h3>
+            <div class="big good" id="outSave">—</div>
+            <div class="muted">RM</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+        <div class="mono" style="font-size:12px; line-height:1.5" id="debug"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>© Nova — Prototype for Malaysia (TNB) | HTML+CSS+JS</footer>
+
+  <script>
+    // ====== UI 切換 ======
+    let TARIFF = 'NORMAL'; // NORMAL | TOU | NEM
+    function setTariff(mode){
+      TARIFF = mode;
+      document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+      document.getElementById('tab-normal').classList.toggle('active', mode==='NORMAL');
+      document.getElementById('tab-tou').classList.toggle('active', mode==='TOU');
+      document.getElementById('tab-nem').classList.toggle('active', mode==='NEM');
+      document.getElementById('touRow').style.display = (mode==='TOU') ? 'grid' : 'none';
+    }
+    function toggleBattery(){
+      const v = document.getElementById('batteryUse').value;
+      document.getElementById('batEffBox').style.display = v==='yes' ? 'block' : 'none';
+    }
+
+    // ====== 工具 ======
+    const round2 = n => Math.round(n*100)/100;
+    const fmtRM = n => 'RM ' + (round2(n)).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+
+    // TNB 簡化費率（sen/kWh; RM = sen/100）
+    function getRates(monthlyKWh){
+      const under1500 = monthlyKWh <= 1500;
+      return {
+        energy: under1500 ? 27.03 : 37.03,
+        capacity: 4.55,
+        network: 12.85,
+        retailRM: monthlyKWh <= 600 ? 0 : 10,
+        peak: under1500 ? 28.52 : 38.52,     // ToU
+        offpeak: under1500 ? 24.43 : 34.43, // ToU
+        AFA: 0
+      };
+    }
+
+    // 計算帳單（簡化）：傳入要向電網購電的 kWh
+    function billRM(kWh, mode, rates, peakRatio){
+      let energySen = 0;
+      if(mode === 'TOU'){
+        const pk = kWh * (peakRatio ?? 0);
+        const op = kWh - pk;
+        energySen = pk * rates.peak + op * rates.offpeak;
+      }else{
+        energySen = kWh * rates.energy;
+      }
+      const nonEnergySen = kWh * (rates.capacity + rates.network + rates.AFA);
+      return energySen/100 + nonEnergySen/100 + rates.retailRM;
+    }
+
+    // ====== 主計算 ======
+    function run(){
+      const m = id => document.getElementById(id);
+      const monthly = parseFloat(m('monthlyUsage').value);
+      const dayPct  = parseFloat(m('dayRatio').value)/100;
+      const peakPct = parseFloat(m('peakRatio').value || '0')/100;
+      const sunH    = parseFloat(m('sunlightHours').value);
+      const pvEff   = parseFloat(m('solarEff').value)/100;
+      const useBat  = m('batteryUse').value==='yes';
+      const batEff  = useBat ? (parseFloat(m('batteryEff').value)/100) : 1;
+
+      if(!(monthly>0) || !(sunH>0) || !(pvEff>0) || dayPct<0 || dayPct>1){
+        alert('請確認輸入數值'); return;
+      }
+      if(TARIFF==='TOU' && (peakPct<0 || peakPct>1)){ alert('峰時比例 0~100'); return; }
+
+      const rates = getRates(monthly);
+
+      // --- PV 容量 & 逆變器 ---
+      const dailyKWh = monthly/30;
+      const cap = dailyKWh / (sunH * pvEff);
+      const inv = Math.ceil(cap*1.1*100)/100;
+
+      // --- 電池容量（夜用 +20% buffer）---
+      const nightDaily = dailyKWh * (1 - dayPct);
+      const batNeed = useBat ? round2(nightDaily / batEff * 1.2) : 0;
+
+      // --- 無系統帳單 ---
+      const bill0 = billRM(monthly, (TARIFF==='TOU' ? 'TOU' : 'NORMAL'), rates, peakPct);
+
+      // --- PV 發電 ---
+      const pvDaily   = cap * sunH * pvEff;
+      const pvMonthly = pvDaily * 30;
+
+      const dayUseM   = monthly * dayPct;
+      const nightUseM = monthly - dayUseM;
+
+      // 白天優先自用，剩餘為 excess
+      const selfUse   = Math.min(pvMonthly, dayUseM);
+      let excess      = Math.max(0, pvMonthly - dayUseM);
+
+      // 電池用多餘電充，夜間放電
+      let batterySupply = 0;
+      if(useBat){
+        batterySupply = Math.min(excess * batEff, nightUseM);
+        // 被電池拿去充的電量
+        excess -= (batterySupply / batEff);
+      }
+
+      // 安裝後需向電網購電的 kWh（未套用 NEM）
+      let gridAfter = monthly - (selfUse + batterySupply);
+
+      // NEM 簡化：餘電 1:1 抵扣
+      if(TARIFF==='NEM'){
+        const nemOffset = Math.min(excess, gridAfter);
+        gridAfter = Math.max(0, gridAfter - nemOffset);
+      }
+
+      // --- 安裝後帳單（以剩餘購電量計）---
+      const modeForBill = (TARIFF==='TOU') ? 'TOU' : 'NORMAL';
+      const bill1 = billRM(gridAfter, modeForBill, rates, peakPct);
+
+      // --- 輸出 ---
+      m('outCap').textContent   = round2(cap).toString();
+      m('outInv').textContent   = round2(inv).toString();
+      m('outBat').textContent   = useBat ? round2(batNeed).toString() : '—';
+      m('outBill0').textContent = fmtRM(bill0).replace('RM ','');
+      m('outBill1').textContent = fmtRM(bill1).replace('RM ','');
+      m('outSave').textContent  = fmtRM(Math.max(0, bill0 - bill1)).replace('RM ','');
+
+      // 附帶debug
+      m('debug').innerText =
+        `模式: ${TARIFF}\n月用電: ${monthly} kWh\nPV月發電: ${round2(pvMonthly)} kWh\n`+
+        `自用: ${round2(selfUse)} kWh, 電池供應: ${round2(batterySupply)} kWh, 餘電: ${round2(excess)} kWh\n`+
+        `購電量(安裝後): ${round2(gridAfter)} kWh`;
+    }
+
+    // 綁定
+    document.getElementById('calcBtn').addEventListener('click', run);
+    // 預設
+    setTariff('NORMAL');
+  </script>
+</body>
+</html>
