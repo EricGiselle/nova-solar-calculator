@@ -135,7 +135,7 @@
           </div>
           <div>
             <label for="batteryUse">是否使用儲能電池？</label>
-            <select id="batteryUse" onchange="toggleBattery()">
+            <select id="batteryUse">
               <option value="no" selected>否</option>
               <option value="yes">是</option>
             </select>
@@ -147,7 +147,7 @@
         </div>
 
         <div class="hr"></div>
-        <button class="btn" onclick="run()">開始計算</button>
+        <button id="calcBtn" class="btn">開始計算</button>
         <small class="note">
           *本工具為工程預估：TNB 收費常數以公開資訊簡化；最終帳單以 TNB 當期公告為準。
         </small>
@@ -207,12 +207,20 @@
       document.getElementById('tab-tou').classList.toggle('active', mode==='TOU');
       document.getElementById('tab-nem').classList.toggle('active', mode==='NEM');
       document.getElementById('touRow').style.display = (mode==='TOU') ? 'grid' : 'none';
+      run();
     }
+
     function toggleBattery(){
       const v = document.getElementById('batteryUse').value;
-      const show = v === 'yes';
-      document.getElementById('batEffBox').style.display = show ? 'block' : 'none';
+      document.getElementById('batEffBox').style.display = v === 'yes' ? 'block' : 'none';
     }
+
+    // ---- 小工具 ----
+    const round2 = n => Math.round(n * 100) / 100;
+    const fmtRM = n => (round2(n)).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
 
     // ---- 常數（簡化的 TNB 估值，單位：sen/kWh；RM=sen/100）----
     function getRates(monthlyKWh){
@@ -222,25 +230,55 @@
         capacity: 4.55,
         network: 12.85,
         retailRM: monthlyKWh <= 600 ? 0 : 10,    // RM/月
-        // ToU energy（簡化）
-        peak: under1500 ? 28.52 : 38.52,
+        peak: under1500 ? 28.52 : 38.52,         // ToU
         offpeak: under1500 ? 24.43 : 34.43,
-        AFA: 0                                   // 先用 0，可在 UI 另開欄位
+        AFA: 0                                   // 可再擴充
       };
+    }
+
+    function billRM(kWh, mode, rates, peakRatio){
+      const safeKWh = Math.max(0, kWh);
+      let energySen = 0;
+      if(mode === 'TOU'){
+        const peakKWh = safeKWh * (peakRatio ?? 0);
+        const offPeakKWh = safeKWh - peakKWh;
+        energySen = peakKWh * rates.peak + offPeakKWh * rates.offpeak;
+      }else{
+        energySen = safeKWh * rates.energy;
+      }
+      const nonEnergySen = safeKWh * (rates.capacity + rates.network + rates.AFA);
+      return energySen / 100 + nonEnergySen / 100 + rates.retailRM;
+    }
+
+    function updateOutputs({cap, inv, batNeed, useBat, bill0, bill1, pvMonthly, selfUse, batterySupply, excess, gridAfter}){
+      const $ = id => document.getElementById(id);
+      $('outCap').textContent = round2(cap).toString();
+      $('outInv').textContent = round2(inv).toString();
+      $('outBat').textContent = useBat ? round2(batNeed).toString() : '—';
+      $('outBill0').textContent = fmtRM(bill0);
+      $('outBill1').textContent = fmtRM(bill1);
+      $('outSave').textContent = fmtRM(Math.max(0, bill0 - bill1));
+      $('debug').innerText =
+        `模式: ${TARIFF}\n` +
+        `PV月發電: ${round2(pvMonthly)} kWh\n` +
+        `自用: ${round2(selfUse)} kWh\n` +
+        `電池供應: ${round2(batterySupply)} kWh\n` +
+        `餘電: ${round2(excess)} kWh\n` +
+        `安裝後購電量: ${round2(gridAfter)} kWh`;
     }
 
     // ---- 主計算 ----
     function run(){
-      const m = n => parseFloat(n);
-      const monthly = m(document.getElementById('monthlyUsage').value);
-      const dayPct = m(document.getElementById('dayRatio').value)/100;
-      const peakPct = m(document.getElementById('peakRatio').value || '0')/100;
-      const sunH = m(document.getElementById('sunlightHours').value);
-      const pvEff = m(document.getElementById('solarEff').value)/100;
-      const useBat = document.getElementById('batteryUse').value==='yes';
-      const batEff = useBat ? (m(document.getElementById('batteryEff').value)/100) : 1;
+      const read = id => document.getElementById(id);
+      const monthly = parseFloat(read('monthlyUsage').value);
+      const dayPct = parseFloat(read('dayRatio').value)/100;
+      const peakPct = parseFloat(read('peakRatio').value || '0')/100;
+      const sunH = parseFloat(read('sunlightHours').value);
+      const pvEff = parseFloat(read('solarEff').value)/100;
+      const useBat = read('batteryUse').value==='yes';
+      const batEff = useBat ? (parseFloat(read('batteryEff').value)/100) : 1;
 
-      if(!(monthly>0) || !(sunH>0) || !(pvEff>0) || dayPct<0 || dayPct>1){ 
+      if(!(monthly>0) || !(sunH>0) || !(pvEff>0) || dayPct<0 || dayPct>1){
         alert('請確認輸入數值'); return;
       }
       if(TARIFF==='TOU' && (peakPct<0 || peakPct>1)){ alert('峰時比例 0~100'); return; }
@@ -259,27 +297,58 @@
       const batNeed = useBat ? round2(batNeedDaily) : 0;
 
       // —— 原始電費（無PV/電池）
-      const bill0 = billRM(monthly, TARIFF, rates, peakPct);
+      const bill0 = billRM(monthly, TARIFF==='TOU' ? 'TOU' : 'NORMAL', rates, peakPct);
 
       // —— PV 月發電量（kWh）
       const pvDaily = cap * sunH * pvEff;
       const pvMonthly = pvDaily * 30;
 
-      // —— 自用 / 餘電（NEM 在 NEM 模式才做 1:1 offset；其餘僅自用）
-      let selfUse = Math.min(pvMonthly, dayUseM);
-      let exportKWh = Math.max(0, pvMonthly - dayUseM); // 白天剩餘
+      // —— 自用 / 餘電
+      const selfUse = Math.min(pvMonthly, dayUseM);
+      let excess = Math.max(0, pvMonthly - dayUseM); // 白天剩餘
       let batterySupply = 0;
       if(useBat){
-        batterySupply = Math.min(exportKWh*batEff, nightUseM);
+        batterySupply = Math.min(excess*batEff, nightUseM);
+        excess -= batterySupply / batEff;
       }
 
       let gridAfterKWh = monthly - (selfUse + batterySupply);
 
-      // NEM 簡化：餘電 1:1 直接抵扣（僅在選 NEM 時）
+      // NEM 簡化：餘電 1:1 抵扣
       if(TARIFF==='NEM'){
-        const nemOffset = Math.min(exportKWh - (useBat? (batterySupply/batEff) : 0), gridAfterKWh);
+        const nemOffset = Math.min(excess, gridAfterKWh);
         gridAfterKWh = Math.max(0, gridAfterKWh - nemOffset);
+        excess -= nemOffset;
       }
 
-     
+      const bill1 = billRM(gridAfterKWh, TARIFF==='TOU' ? 'TOU' : 'NORMAL', rates, peakPct);
 
+      updateOutputs({
+        cap,
+        inv,
+        batNeed,
+        useBat,
+        bill0,
+        bill1,
+        pvMonthly,
+        selfUse,
+        batterySupply,
+        excess,
+        gridAfter: gridAfterKWh
+      });
+    }
+
+    document.getElementById('batteryUse').addEventListener('change', () => {
+      toggleBattery();
+      run();
+    });
+    document.getElementById('calcBtn').addEventListener('click', run);
+
+    // 初始狀態
+    document.addEventListener('DOMContentLoaded', () => {
+      toggleBattery();
+      run();
+    });
+  </script>
+</body>
+</html>
