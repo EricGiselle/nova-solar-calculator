@@ -156,6 +156,7 @@
       <!-- 右側：輸出 -->
       <section class="card span-5" id="outCard">
         <h2 style="margin:0 0 8px">結果</h2>
+        <p id="resultHint" class="muted" style="margin:0 0 12px; font-size:13px">填好左側參數，按「開始計算」即可估算容量、電池與每月節省。</p>
         <div class="kpi">
           <div class="kcard">
             <h3>太陽能容量</h3>
@@ -231,6 +232,8 @@
 
     // ---- 主計算 ----
     function run(){
+      const hint = document.getElementById('resultHint');
+      if(hint) hint.style.display = 'none';
       const m = n => parseFloat(n);
       const monthly = m(document.getElementById('monthlyUsage').value);
       const dayPct = m(document.getElementById('dayRatio').value)/100;
