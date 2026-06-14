@@ -25,8 +25,21 @@ Two mechanisms are used:
 | 4 | **Security Guidance** (`security-guidance@claude-plugins-official`) — reviews each change for vulnerabilities | `enabledPlugins` in settings | ⏳ Installs on folder trust |
 | 5 | **Claude-mem** (`thedotmack/claude-mem`) — cross-session memory | `extraKnownMarketplaces` + `enabledPlugins` | ⏳ See note below |
 | 6 | **GStack** (`garrytan/gstack`) — 23 opinionated CEO/Designer/Eng-Manager/QA roles | Manual (see below) | ⚠️ Manual step required |
+| 7 | **ECC / everything-claude-code** (`ecc@ecc`, `affaan-m/everything-claude-code`) — 262 skills, 64 agents, 84 commands, 20 rules, hooks | `extraKnownMarketplaces` + `enabledPlugins` | ⏳ See note below |
 
 ## Notes / caveats
+
+### ECC / everything-claude-code (#7)
+Installed via the marketplace mechanism, NOT via its `install.sh`. The upstream
+`install.sh` runs `npm install` and a custom Node installer that rewrites your
+global `~/.claude`; we deliberately avoided executing that untrusted code and
+use the standard, reversible plugin path instead.
+
+Heads-up: ECC ships `hooks/hooks.json` with **PreToolUse hooks that run Node
+scripts on every Bash/Write/Edit call** (quality/push/compaction checks). That
+is an always-on behavior change once the plugin is enabled. To turn it off
+without removing the plugin: `/plugin disable ecc@ecc`. To remove entirely:
+`/plugin uninstall ecc@ecc`.
 
 ### Claude-mem (#5)
 The plugin wires up SessionStart/Stop hooks, but the actual memory worker is a
