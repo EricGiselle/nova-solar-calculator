@@ -2,7 +2,7 @@ name: Deploy calculator to GitHub Pages
 
 on:
   push:
-    branches: [design/calculator-polish]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
