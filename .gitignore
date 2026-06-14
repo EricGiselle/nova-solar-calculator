@@ -1,0 +1,2 @@
+# gstack browse / runtime artifacts (local only — never commit, contains tokens)
+.gstack/
